@@ -143,3 +143,40 @@ function (cb::TensorBoardCallback)(rng, model, sampler, transition, iteration, s
         @info "" log_step_increment=1
     end
 end
+
+function (cb::Vector{TensorBoardCallback})(rng, model, sampler, transition, iteration, state; kwargs...)
+
+    id = Threads.threadid()
+
+    stats = cb[id].stats
+    lg = cb[id].logger
+    filter = cb[id].variable_filter
+    
+    with_logger(lg) do
+        for (ksym, val) in zip(Turing.Inference._params_to_array([transition])...)
+            k = string(ksym)
+            if !filter(k)
+                continue
+            end
+            stat = stats[k]
+            
+            # Log the raw value
+            @info k val
+
+            # Update statistic estimators
+            fit!(stat, val)
+
+            # Need some iterations before we start showing the stats
+            @info k stat
+        end
+
+        # Transition statstics
+        if cb[id].include_extras
+            names, vals = Turing.Inference.get_transition_extras([transition])
+            for (name, val) in zip(string.(names), vec(vals))
+                @info ("extras/" * name) val
+            end
+        end
+        @info "" log_step_increment=1
+    end
+end
